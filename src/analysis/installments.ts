@@ -5,9 +5,11 @@ import { round2 } from './spending.js'
 export type FutureInstallment = {
   description: string
   amount: number
-  /** parcela que cairá neste mês, ex.: 4 de 12 */
+  /** parcela que cai neste mês, ex.: 4 de 12 */
   installment: number
   total: number
+  /** true quando a linha não veio da instituição e foi inferida */
+  projected: boolean
 }
 
 export type OutlookMonth = {
@@ -17,12 +19,40 @@ export type OutlookMonth = {
 }
 
 /**
- * Projeta o que já está comprometido nos próximos meses.
+ * Remove o marcador de parcela que a instituição embute na descrição
+ * ("AMAZONMKTPLC*WEBCO10/12" → "AMAZONMKTPLC*WEBCO").
  *
- * Para uma compra `n de N`, as parcelas `n+1..N` caem nos meses seguintes ao
- * da compra. É o que responde "quanto do meu agosto já está vendido".
+ * Sem isso, cada parcela da mesma compra tem uma descrição diferente e vira um
+ * parcelamento distinto — cada um projetando a própria cauda, inflando o
+ * comprometimento em várias vezes.
+ */
+export function stripInstallmentSuffix(description: string): string {
+  return description.replace(/\s*\d{1,3}\/\d{1,3}\s*$/, '').trim()
+}
+
+/**
+ * Identidade de um parcelamento. A instituição não dá um id de compra, então
+ * agrupamos por lojista + total de parcelas + valor da parcela. Duas compras
+ * distintas no mesmo lojista, com o mesmo número de parcelas e exatamente o
+ * mesmo valor, colidiriam — raro o bastante para não valer mais complexidade.
+ */
+const planKey = (tx: DomainTransaction): string =>
+  `${tx.merchantName ?? stripInstallmentSuffix(tx.description)}|${tx.installmentTotal}|${Math.abs(tx.amount)}`
+
+const billMonthOf = (tx: DomainTransaction): string => tx.billForecastDate ?? monthOf(tx.date)
+
+/**
+ * Quanto já está comprometido nos próximos meses.
  *
- * @param months quantos meses de horizonte
+ * O Open Finance devolve **cada parcela como uma transação própria**, inclusive
+ * as futuras (PENDING, datadas à frente, com billForecastDate). Então o trabalho
+ * aqui é ler o que já existe — não projetar em cima, o que contaria em dobro.
+ *
+ * A projeção sobrou só para o caso da instituição não mandar a cauda: se o maior
+ * número de parcela visto for menor que o total, as que faltam são inferidas a
+ * partir do mês da última conhecida, e vêm marcadas com `projected: true`.
+ *
+ * @param months horizonte em meses
  * @param fromMonth mês de referência; o horizonte começa no mês seguinte
  */
 export function installmentsOutlook(
@@ -37,19 +67,52 @@ export function installmentsOutlook(
   }))
   const byMonth = new Map(horizon.map((m) => [m.month, m]))
 
-  for (const tx of txs) {
-    const { installmentNumber: n, installmentTotal: total } = tx
-    if (n === null || total === null || n >= total) continue
-    if (tx.amount >= 0) continue
+  const installments = txs.filter(
+    (tx) => tx.installmentNumber !== null && tx.installmentTotal !== null && tx.amount < 0,
+  )
 
-    const amount = Math.abs(tx.amount)
-    const purchaseMonth = monthOf(tx.date)
+  const add = (month: string, item: FutureInstallment): void => {
+    const slot = byMonth.get(month)
+    if (!slot) return // fora do horizonte pedido
+    slot.committed = round2(slot.committed + item.amount)
+    slot.items.push(item)
+  }
 
-    for (let i = 1; i <= total - n; i++) {
-      const slot = byMonth.get(addMonths(purchaseMonth, i))
-      if (!slot) continue // fora do horizonte pedido
-      slot.committed = round2(slot.committed + amount)
-      slot.items.push({ description: tx.description, amount, installment: n + i, total })
+  const plans = new Map<string, DomainTransaction[]>()
+  for (const tx of installments) {
+    const key = planKey(tx)
+    const plan = plans.get(key)
+    if (plan) plan.push(tx)
+    else plans.set(key, [tx])
+  }
+
+  for (const plan of plans.values()) {
+    const total = plan[0]!.installmentTotal!
+    const amount = Math.abs(plan[0]!.amount)
+    const description = stripInstallmentSuffix(plan[0]!.description)
+
+    // 1. As parcelas que a instituição já informou.
+    for (const tx of plan) {
+      add(billMonthOf(tx), {
+        description,
+        amount,
+        installment: tx.installmentNumber!,
+        total,
+        projected: false,
+      })
+    }
+
+    // 2. A cauda que faltar, se faltar.
+    const latest = plan.reduce((a, b) => (a.installmentNumber! >= b.installmentNumber! ? a : b))
+    const lastKnown = latest.installmentNumber!
+    for (let n = lastKnown + 1; n <= total; n++) {
+      add(addMonths(billMonthOf(latest), n - lastKnown), {
+        description,
+        amount,
+        installment: n,
+        total,
+        projected: true,
+      })
     }
   }
 

@@ -65,6 +65,11 @@ function classifyCadence(intervals: number[]): Cadence | null {
 export function findRecurring(txs: DomainTransaction[]): Recurring[] {
   const groups = new Map<string, DomainTransaction[]>()
   for (const tx of txs) {
+    // Compra em 12x tem a cara exata de uma assinatura mensal: mesmo lojista,
+    // mesmo valor, todo mês. Mas é uma compra só, e acaba. Parcelamento é
+    // assunto do installments_outlook.
+    if (tx.installmentTotal !== null) continue
+
     const key = normalizeMerchant(tx)
     if (!key) continue
     const group = groups.get(key)

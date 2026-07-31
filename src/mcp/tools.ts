@@ -178,6 +178,16 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
 
       if (byMonth) payload.porMes = spendingByMonth(txs)
 
+      // Parcela futura chega como transação datada à frente. Somá-la sem dizer
+      // transformaria "quanto gastei" em "quanto gastei mais quanto ainda vou".
+      const now = today()
+      const futuras = txs.filter((tx) => tx.date > now && tx.amount < 0)
+      if (futuras.length > 0) {
+        payload.observacao =
+          `${futuras.length} transações do período ainda não aconteceram ` +
+          `(parcelas futuras já lançadas pela instituição) e estão somadas no total.`
+      }
+
       if (compareWithPrevious) {
         const prev = previousPeriod(range)
         payload.periodoAnterior = prev
@@ -264,10 +274,13 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
     },
     async ({ months }) => {
       const now = today()
-      // 24 meses para trás cobre o parcelamento mais longo que ainda tem saldo.
+      // Para trás, 24 meses cobrem o parcelamento mais longo que ainda tem saldo.
+      // Para frente é obrigatório: a instituição manda as parcelas futuras como
+      // transações datadas à frente, e `to: now` as deixaria de fora justamente
+      // na tool que existe para enxergá-las.
       const txs = repo.queryTransactions({
         from: `${addMonths(monthOf(now), -24)}-01`,
-        to: now,
+        to: `${addMonths(monthOf(now), months + 2)}-28`,
         kind: 'CREDIT',
       })
       const outlook = installmentsOutlook(txs, months, monthOf(now))
