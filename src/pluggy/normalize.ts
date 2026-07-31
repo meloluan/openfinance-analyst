@@ -71,6 +71,7 @@ export function normalizeItem(item: Item): DomainItem {
   return {
     id: item.id,
     institutionName: item.connector?.name ?? 'desconhecida',
+    connectorId: item.connector?.id ?? null,
     status: item.status,
     lastUpdatedAt: item.lastUpdatedAt ? new Date(item.lastUpdatedAt).toISOString() : null,
     consentExpiresAt: item.consentExpiresAt ? new Date(item.consentExpiresAt).toISOString() : null,

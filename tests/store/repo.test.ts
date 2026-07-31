@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import Database from 'better-sqlite3-multiple-ciphers'
 import { openDb } from '../../src/store/db.js'
+import { MIGRATIONS } from '../../src/store/schema.js'
 import { Repo } from '../../src/store/repo.js'
 import type { DomainAccount, DomainItem, DomainTransaction } from '../../src/domain.js'
 
@@ -38,6 +40,7 @@ const account = (over: Partial<DomainAccount> = {}): DomainAccount => ({
 const item = (over: Partial<DomainItem> = {}): DomainItem => ({
   id: 'i1',
   institutionName: 'Itaú',
+  connectorId: 200,
   status: 'UPDATED',
   lastUpdatedAt: '2026-07-12T10:00:00Z',
   consentExpiresAt: '2027-01-01T00:00:00Z',
@@ -147,7 +150,37 @@ describe('Repo overrides e budgets', () => {
 describe('migrations', () => {
   it('banco novo aplica todas e fica na versão corrente', () => {
     const db = openDb(':memory:', 'k')
-    const version = db.pragma('user_version', { simple: true })
-    expect(version).toBeGreaterThan(0)
+    expect(db.pragma('user_version', { simple: true })).toBe(MIGRATIONS.length)
+  })
+
+  it('a migration 2 adiciona connector_id de fato', () => {
+    const db = openDb(':memory:', 'k')
+    const columns = (db.pragma('table_info(items)') as { name: string }[]).map((c) => c.name)
+    expect(columns).toContain('connector_id')
+  })
+
+  it('banco criado numa versão antiga migra sem perder dado', () => {
+    // Simula um banco parado na migration 1, como o de quem já rodou o MCP antes.
+    const db = new Database(':memory:')
+    db.exec(MIGRATIONS[0]!)
+    db.pragma('user_version = 1')
+    db.prepare(
+      `INSERT INTO items (id, institution_name, status, last_updated_at, consent_expires_at, last_synced_at)
+       VALUES ('i-antigo', 'Itaú', 'UPDATED', NULL, NULL, '2026-07-01')`,
+    ).run()
+
+    // Reaplica o que falta, do mesmo jeito que openDb faria.
+    for (let v = 1; v < MIGRATIONS.length; v++) {
+      db.exec(MIGRATIONS[v]!)
+      db.pragma(`user_version = ${v + 1}`)
+    }
+
+    const row = db.prepare('SELECT id, connector_id FROM items').get() as {
+      id: string
+      connector_id: number | null
+    }
+    expect(row.id).toBe('i-antigo')
+    expect(row.connector_id).toBeNull()
+    expect(db.pragma('user_version', { simple: true })).toBe(MIGRATIONS.length)
   })
 })

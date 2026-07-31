@@ -67,4 +67,7 @@ export const MIGRATIONS: string[] = [
     value TEXT NOT NULL
   );
   `,
+  // Distinguir o conector MeuPluggy (200) das conexões diretas, que pausam
+  // quando o trial comercial da Pluggy acaba.
+  `ALTER TABLE items ADD COLUMN connector_id INTEGER;`,
 ]

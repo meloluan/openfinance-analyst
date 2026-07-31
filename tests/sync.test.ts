@@ -18,7 +18,12 @@ const TX: DomainTransaction = {
   status: 'POSTED', raw: '{}',
 }
 
-type FakeOpts = { status?: string; consentExpiresAt?: string | null; throwOn?: string }
+type FakeOpts = {
+  status?: string
+  consentExpiresAt?: string | null
+  throwOn?: string
+  connectorId?: number
+}
 
 function fakeGateway(opts: FakeOpts = {}): Gateway & { sinceSeen: string[] } {
   const sinceSeen: string[] = []
@@ -29,6 +34,7 @@ function fakeGateway(opts: FakeOpts = {}): Gateway & { sinceSeen: string[] } {
       return {
         id,
         institutionName: id === 'i2' ? 'Nubank' : 'Itaú',
+        connectorId: opts.connectorId ?? 200,
         status: opts.status ?? 'UPDATED',
         lastUpdatedAt: '2026-07-12T10:00:00Z',
         consentExpiresAt: opts.consentExpiresAt === undefined ? '2027-01-01T00:00:00Z' : opts.consentExpiresAt,
@@ -60,6 +66,19 @@ describe('syncAll', () => {
     expect(r.connections[0]!.healthy).toBe(false)
     expect(r.connections[0]!.warning).toMatch(/reautoriz/i)
     expect(r.connections[0]!.staleSince).toBe('2026-07-12T10:00:00Z')
+  })
+
+  it('conexão pelo conector MeuPluggy (200) não gera aviso de cobrança', async () => {
+    const r = await syncAll(fakeGateway({ connectorId: 200 }), newRepo(), ['i1'], '2026-07-30')
+    expect(r.connections[0]!.warning).toBeNull()
+  })
+
+  it('conexão direta com o banco avisa que vai pausar quando o trial acabar', async () => {
+    const r = await syncAll(fakeGateway({ connectorId: 201 }), newRepo(), ['i1'], '2026-07-30')
+    expect(r.connections[0]!.warning).toMatch(/trial/i)
+    expect(r.connections[0]!.warning).toMatch(/MeuPluggy/)
+    // Continua saudável: o dado ainda chega hoje, o problema é a validade.
+    expect(r.connections[0]!.healthy).toBe(true)
   })
 
   it('avisa quando o consentimento está perto de expirar', async () => {

@@ -34,6 +34,7 @@ const gateway: Gateway = {
     return {
       id,
       institutionName: 'Itaú',
+      connectorId: 200,
       status: 'UPDATED',
       lastUpdatedAt: `${NOW}T10:00:00Z`,
       consentExpiresAt: null,
@@ -63,6 +64,7 @@ function seed(): Repo {
     {
       id: 'i1',
       institutionName: 'Itaú',
+      connectorId: 200,
       status: 'UPDATED',
       lastUpdatedAt: `${NOW}T10:00:00Z`,
       consentExpiresAt: null,
@@ -235,6 +237,7 @@ describe('superfície MCP', () => {
       {
         id: 'i1',
         institutionName: 'Itaú',
+        connectorId: 200,
         status: 'LOGIN_ERROR',
         lastUpdatedAt: `${NOW}T10:00:00Z`,
         consentExpiresAt: null,

@@ -24,10 +24,11 @@ export class Repo {
   upsertItem(item: DomainItem, lastSyncedAt: string): void {
     this.db
       .prepare(
-        `INSERT INTO items (id, institution_name, status, last_updated_at, consent_expires_at, last_synced_at)
-         VALUES (@id, @institutionName, @status, @lastUpdatedAt, @consentExpiresAt, @lastSyncedAt)
+        `INSERT INTO items (id, institution_name, connector_id, status, last_updated_at, consent_expires_at, last_synced_at)
+         VALUES (@id, @institutionName, @connectorId, @status, @lastUpdatedAt, @consentExpiresAt, @lastSyncedAt)
          ON CONFLICT(id) DO UPDATE SET
            institution_name = excluded.institution_name,
+           connector_id = excluded.connector_id,
            status = excluded.status,
            last_updated_at = excluded.last_updated_at,
            consent_expires_at = excluded.consent_expires_at,
@@ -143,7 +144,7 @@ export class Repo {
   listItems(): StoredItem[] {
     return this.db
       .prepare(
-        `SELECT id, institution_name AS institutionName, status,
+        `SELECT id, institution_name AS institutionName, connector_id AS connectorId, status,
            last_updated_at AS lastUpdatedAt, consent_expires_at AS consentExpiresAt,
            last_synced_at AS lastSyncedAt
          FROM items ORDER BY institution_name`,

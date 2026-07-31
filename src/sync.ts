@@ -19,6 +19,13 @@ const CONSENT_WARNING_DAYS = 30
 
 const HEALTHY_STATUSES = new Set(['UPDATED', 'UPDATING'])
 
+/**
+ * Conector MeuPluggy — o único caminho gratuito por tempo indeterminado para
+ * os próprios dados. Conexão direta com a instituição é tratada pela Pluggy
+ * como "conta real de cliente" e pausa quando o trial comercial acaba.
+ */
+export const MEU_PLUGGY_CONNECTOR_ID = 200
+
 export function assessHealth(item: DomainItem, now: string): ConnectionHealth {
   const healthy = HEALTHY_STATUSES.has(item.status)
   const warnings: string[] = []
@@ -40,6 +47,15 @@ export function assessHealth(item: DomainItem, now: string): ConnectionHealth {
       break
     default:
       break
+  }
+
+  if (item.connectorId !== null && item.connectorId !== MEU_PLUGGY_CONNECTOR_ID) {
+    warnings.push(
+      `${item.institutionName}: esta conexão usa o conector ${item.connectorId}, não o MeuPluggy ` +
+        `(${MEU_PLUGGY_CONNECTOR_ID}). A Pluggy trata conexão direta como conta de cliente e ela ` +
+        `pausa quando o trial comercial acabar. Recrie a conexão pelo conector MeuPluggy para ` +
+        `manter o acesso gratuito por tempo indeterminado.`,
+    )
   }
 
   if (item.consentExpiresAt) {

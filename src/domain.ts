@@ -51,6 +51,12 @@ export type DomainTransaction = {
 export type DomainItem = {
   id: string
   institutionName: string
+  /**
+   * 200 = conector MeuPluggy, o caminho gratuito por tempo indeterminado.
+   * Qualquer outro id é conexão direta com a instituição, que a Pluggy trata
+   * como "conta real de cliente" e pausa quando o trial comercial acaba.
+   */
+  connectorId: number | null
   status: string
   /** ISO timestamp da última sincronização da Pluggy com a instituição */
   lastUpdatedAt: string | null

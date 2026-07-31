@@ -17,6 +17,19 @@ O **[Meu Pluggy](https://www.pluggy.ai/meu-pluggy)** resolve isso: a Pluggy é p
 
 > **Isto é de uso pessoal, um CPF.** Servir outras pessoas cai no plano comercial da Pluggy (a partir de R$ 2.500/mês). O projeto é somente leitura — nenhuma tool inicia pagamento.
 
+### O trial de 14 dias não se aplica a você (se você conectar do jeito certo)
+
+O trial cobre os **recursos comerciais** — conectar contas de outras pessoas. Acabado o trial, "as conexões com contas reais de clientes pausam até você ativar um plano". O acesso aos **seus próprios** dados é outra coisa: "o Meu Pluggy e o acesso à API através dele são gratuitos por tempo indeterminado, sem prazo de expiração", via **Conector 200**.
+
+A armadilha é que o dashboard deixa criar a conexão dos dois jeitos, e o caminho errado é o mais intuitivo:
+
+| como você conecta | conector | o que acontece em 14 dias |
+|---|---|---|
+| escolhendo **MeuPluggy** na lista | `200` | continua funcionando, de graça, sem prazo |
+| escolhendo **Itaú / Nubank** direto | outro | **pausa** até você assinar um plano |
+
+O MCP detecta isso: se alguma conexão não for o conector 200, toda resposta de análise passa a carregar um aviso explicando que ela vai pausar. Você descobre no primeiro `sync`, não no dia 15.
+
 ## Setup
 
 > São **dois portais separados, com cadastros separados**. `meu.pluggy.ai` é só o consentimento — ele não expõe credencial de API e não é onde você a procura. As credenciais nascem no `dashboard.pluggy.ai`.

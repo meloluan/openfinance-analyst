@@ -149,12 +149,13 @@ describe('normalizeItem', () => {
   it('extrai nome da instituição e expiração do consentimento', () => {
     const item = normalizeItem({
       id: 'i1',
-      connector: { name: 'Itaú' },
+      connector: { id: 200, name: 'Itaú' },
       status: 'UPDATED',
       lastUpdatedAt: new Date('2026-07-12T10:00:00Z'),
       consentExpiresAt: new Date('2027-01-01T00:00:00Z'),
     } as any)
     expect(item.institutionName).toBe('Itaú')
+    expect(item.connectorId).toBe(200)
     expect(item.status).toBe('UPDATED')
     expect(item.consentExpiresAt).toBe('2027-01-01T00:00:00.000Z')
   })
@@ -162,6 +163,7 @@ describe('normalizeItem', () => {
   it('sobrevive a connector ausente', () => {
     const item = normalizeItem({ id: 'i1', status: 'UPDATED', lastUpdatedAt: null, consentExpiresAt: null } as any)
     expect(item.institutionName).toBe('desconhecida')
+    expect(item.connectorId).toBeNull()
     expect(item.lastUpdatedAt).toBeNull()
   })
 })
