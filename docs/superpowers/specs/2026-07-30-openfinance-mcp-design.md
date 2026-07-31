@@ -94,9 +94,19 @@ Todas devolvem **números agregados**, não listas de transações — exceto `s
 - `budget_status` — realizado vs meta, com projeção de fim de mês pelo ritmo atual
 - `recategorize` — cria regra de override e reprocessa o histórico de uma vez
 
+### Convenções de parâmetros
+
+Fixadas aqui para que toda tool se comporte igual:
+
+- **Período** aceita `YYYY-MM` ou o par `from`/`to` em ISO date. Default: mês corrente.
+- **Fuso.** Todo agrupamento por mês usa `America/Sao_Paulo`. Compra de dia 1º à 0h30 pertence ao mês certo — agrupar em UTC jogaria transações para o mês anterior.
+- **`sync`** sincroniza todas as conexões por padrão; aceita filtro opcional por instituição.
+- **`card_bill`** usa a fatura aberta atual por padrão; a fechada é escolha explícita.
+- **`installments_outlook`** projeta 6 meses por padrão.
+
 ### Heurísticas
 
-**Recorrência.** Agrupa por merchant normalizado; exige ≥3 ocorrências; intervalo mediano próximo de 30 dias (também reconhece 7, 14 e 365); variação de valor ≤15%. Marca `price_increase` quando a última cobrança supera a mediana das anteriores em mais de 5% — o caso "a assinatura subiu e eu não vi".
+**Recorrência.** Agrupa por merchant normalizado; exige ≥3 ocorrências; intervalo mediano de 30 dias com tolerância de ±4 dias (também reconhece 7, 14 e 365, com a mesma tolerância); variação de valor ≤15%. Marca `price_increase` quando a última cobrança supera a mediana das anteriores em mais de 5% — o caso "a assinatura subiu e eu não vi".
 
 **Parcelas.** Para cada compra com `n de N`, projeta as `N-n` parcelas restantes nos meses seguintes. É o que responde "quanto do meu agosto já está vendido".
 
@@ -123,7 +133,7 @@ Todas devolvem **números agregados**, não listas de transações — exceto `s
 - Iniciação de pagamento (Pix). Este MCP é somente leitura.
 - Multi-CPF ou qualquer uso comercial — violaria os termos do Meu Pluggy.
 - Interface gráfica, dashboard web, app.
-- Análise de investimentos além de saldo consolidado. Gasto é o foco; posição e rentabilidade ficam para depois.
+- Análise de investimentos. Contas de corretora **são conectadas e aparecem em `list_accounts` com saldo consolidado**, mas posição, rentabilidade e alocação ficam para depois — gasto é o foco.
 - Importação de OFX/CSV. Só entra se a Pluggy deixar de atender.
 
 ## Referências
