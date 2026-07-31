@@ -1,18 +1,19 @@
 {
   "name": "openfinance-analyst",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "directories": {
-    "doc": "docs"
+  "description": "MCP server que consolida conta e cartão via Open Finance (Pluggy) para análise de gastos",
+  "type": "module",
+  "bin": {
+    "openfinance-analyst": "dist/index.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx src/index.ts"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["mcp", "open-finance", "pluggy", "finance"],
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "better-sqlite3-multiple-ciphers": "^12.11.1",
