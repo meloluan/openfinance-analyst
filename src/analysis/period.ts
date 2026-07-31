@@ -38,11 +38,39 @@ export function lastDayOfMonth(month: string): number {
   return new Date(Date.UTC(year, m, 0)).getUTCDate()
 }
 
+/** Soma (ou subtrai) dias de uma data 'YYYY-MM-DD'. */
+export function addDays(date: string, n: number): string {
+  const ms = Date.parse(`${date}T00:00:00Z`) + n * 86_400_000
+  return new Date(ms).toISOString().slice(0, 10)
+}
+
 /** Dias entre duas datas 'YYYY-MM-DD', inclusive nas duas pontas. */
 export function daysBetween(from: string, to: string): number {
   const a = Date.parse(`${from}T00:00:00Z`)
   const b = Date.parse(`${to}T00:00:00Z`)
   return Math.floor((b - a) / 86_400_000) + 1
+}
+
+/**
+ * Período imediatamente anterior, para comparação.
+ *
+ * Quando o período é um mês calendário inteiro, o anterior é o mês anterior —
+ * não "30 dias antes", que faria junho comparar contra 2 de maio a 31 de maio.
+ * Fora desse caso, desloca pela mesma quantidade de dias.
+ */
+export function previousPeriod(p: Period): Period {
+  const month = monthOf(p.from)
+  const isWholeMonth =
+    p.from.endsWith('-01') &&
+    p.to === `${month}-${String(lastDayOfMonth(month)).padStart(2, '0')}`
+
+  if (isWholeMonth) {
+    const prev = addMonths(month, -1)
+    return { from: `${prev}-01`, to: `${prev}-${String(lastDayOfMonth(prev)).padStart(2, '0')}` }
+  }
+
+  const length = daysBetween(p.from, p.to)
+  return { from: addDays(p.from, -length), to: addDays(p.from, -1) }
 }
 
 export type PeriodInput = { period?: string; from?: string; to?: string }

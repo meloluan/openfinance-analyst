@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3-multiple-ciphers'
+import { chmodSync } from 'node:fs'
 import { MIGRATIONS } from './schema.js'
 
 export type Db = Database.Database
@@ -18,6 +19,10 @@ export function openDb(path: string, key: string): Db {
     // aspas simples evita quebrar a string. A chave gerada é hex, então não contém aspas.
     db.pragma(`key='${key.replace(/'/g, "''")}'`)
     db.pragma('journal_mode = WAL')
+
+    // 0o600 mesmo com o diretório em 0o700: o banco guarda o extrato inteiro,
+    // e o default do SQLite (0o644) deixaria legível para qualquer processo do usuário.
+    chmodSync(path, 0o600)
   }
   db.pragma('foreign_keys = ON')
 

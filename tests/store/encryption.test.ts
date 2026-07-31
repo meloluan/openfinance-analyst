@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { readFileSync, rmSync, mkdtempSync } from 'node:fs'
+import { readFileSync, rmSync, mkdtempSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import Database from 'better-sqlite3-multiple-ciphers'
@@ -47,6 +47,13 @@ describe('cifra em disco', () => {
     const reopened = openDb(path, key)
     expect(new Repo(reopened).listBudgets()).toEqual([{ category: 'Transporte', amount: 300 }])
     reopened.close()
+  })
+
+  it('o arquivo do banco fica 600, não legível por outros processos', () => {
+    const path = tempDbPath()
+    const db = openDb(path, 'e'.repeat(64))
+    db.close()
+    expect(statSync(path).mode & 0o777).toBe(0o600)
   })
 
   it('falha ao abrir com a chave errada', () => {

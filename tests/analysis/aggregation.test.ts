@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { addMonths, daysBetween, monthOf, resolvePeriod } from '../../src/analysis/period.js'
+import {
+  addDays,
+  addMonths,
+  daysBetween,
+  monthOf,
+  previousPeriod,
+  resolvePeriod,
+} from '../../src/analysis/period.js'
 import { applyOverrides } from '../../src/analysis/categories.js'
 import { comparePeriods, spendingByCategory, spendingByMonth } from '../../src/analysis/spending.js'
 import { billComposition } from '../../src/analysis/bill.js'
@@ -65,6 +72,34 @@ describe('helpers de mês', () => {
   it('daysBetween conta os dias inclusive', () => {
     expect(daysBetween('2026-06-01', '2026-06-30')).toBe(30)
     expect(daysBetween('2026-06-01', '2026-06-01')).toBe(1)
+  })
+
+  it('addDays atravessa a virada de mês', () => {
+    expect(addDays('2026-07-30', -35)).toBe('2026-06-25')
+    expect(addDays('2026-12-31', 1)).toBe('2027-01-01')
+  })
+})
+
+describe('previousPeriod', () => {
+  it('mês inteiro compara contra o mês calendário anterior, não 30 dias antes', () => {
+    expect(previousPeriod({ from: '2026-06-01', to: '2026-06-30' })).toEqual({
+      from: '2026-05-01',
+      to: '2026-05-31',
+    })
+  })
+
+  it('mês inteiro seguinte a fevereiro respeita o tamanho do mês', () => {
+    expect(previousPeriod({ from: '2026-03-01', to: '2026-03-31' })).toEqual({
+      from: '2026-02-01',
+      to: '2026-02-28',
+    })
+  })
+
+  it('intervalo arbitrário desloca pela mesma quantidade de dias', () => {
+    expect(previousPeriod({ from: '2026-06-10', to: '2026-06-19' })).toEqual({
+      from: '2026-05-31',
+      to: '2026-06-09',
+    })
   })
 })
 
