@@ -73,11 +73,19 @@ export type ConnectionHealth = {
   staleSince: string | null
   /** Texto acionável para o usuário, ou null quando está tudo bem */
   warning: string | null
+  /** Transações novas trazidas por esta conexão neste sync */
+  newTransactions: number
 }
 
 export type SyncReport = {
   connections: ConnectionHealth[]
-  /** institutionName → quantidade de transações novas */
+  /**
+   * institutionName → total de transações novas.
+   *
+   * Com o conector MeuPluggy toda conexão se chama "MeuPluggy", então nomes
+   * colidem: os valores são somados, e o detalhe por conexão fica em
+   * `connections[].newTransactions`.
+   */
   newTransactions: Record<string, number>
   errors: string[]
 }

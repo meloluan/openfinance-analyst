@@ -102,6 +102,7 @@ export function assessHealth(item: DomainItem, now: string): ConnectionHealth {
     healthy,
     staleSince: healthy ? null : item.lastUpdatedAt,
     warning: warnings.length > 0 ? warnings.join(' ') : null,
+    newTransactions: 0,
   }
 }
 
@@ -140,7 +141,8 @@ export async function syncAll(
   for (const itemId of targets) {
     try {
       const item = await gateway.fetchItem(itemId)
-      report.connections.push(assessHealth(item, now))
+      const health = assessHealth(item, now)
+      report.connections.push(health)
       repo.upsertItem(item, now)
 
       const accounts = await gateway.fetchAccounts(itemId)
@@ -158,7 +160,11 @@ export async function syncAll(
       }
 
       repo.setWatermark(itemId, now)
-      report.newTransactions[item.institutionName] = added
+      health.newTransactions = added
+      // Soma em vez de atribuir: com o conector MeuPluggy os nomes colidem e
+      // a atribuição direta descartava a contagem da conexão anterior.
+      report.newTransactions[item.institutionName] =
+        (report.newTransactions[item.institutionName] ?? 0) + added
     } catch (err) {
       // Mensagem sem payload da exceção: erro de SDK pode carregar credencial.
       const reason = err instanceof Error ? err.message : 'erro desconhecido'

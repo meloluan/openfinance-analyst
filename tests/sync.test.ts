@@ -138,6 +138,26 @@ describe('syncAll', () => {
     expect(g2.sinceSeen[0]).toBe('2026-06-25')
   })
 
+  it('duas conexões com o mesmo nome somam em vez de uma sobrescrever a outra', async () => {
+    // Todo item do conector MeuPluggy se chama "MeuPluggy": os nomes colidem.
+    const g: Gateway = {
+      ...fakeGateway(),
+      async fetchItem(id) {
+        return {
+          id,
+          institutionName: 'MeuPluggy',
+          connectorId: 200,
+          status: 'UPDATED',
+          lastUpdatedAt: '2026-07-30T10:00:00Z',
+          consentExpiresAt: null,
+        }
+      },
+    }
+    const r = await syncAll(g, newRepo(), ['i1', 'i2'], '2026-07-30')
+    expect(r.newTransactions['MeuPluggy']).toBe(2) // uma de cada, não 1
+    expect(r.connections.map((c) => c.newTransactions)).toEqual([1, 1])
+  })
+
   it('falha em uma conexão não derruba as outras', async () => {
     const r = await syncAll(fakeGateway({ throwOn: 'i1' }), newRepo(), ['i1', 'i2'], '2026-07-30')
     expect(r.errors).toHaveLength(1)
