@@ -23,6 +23,7 @@ type FakeOpts = {
   consentExpiresAt?: string | null
   throwOn?: string
   connectorId?: number
+  lastUpdatedAt?: string | null
 }
 
 function fakeGateway(opts: FakeOpts = {}): Gateway & { sinceSeen: string[] } {
@@ -36,7 +37,8 @@ function fakeGateway(opts: FakeOpts = {}): Gateway & { sinceSeen: string[] } {
         institutionName: id === 'i2' ? 'Nubank' : 'Itaú',
         connectorId: opts.connectorId ?? 200,
         status: opts.status ?? 'UPDATED',
-        lastUpdatedAt: '2026-07-12T10:00:00Z',
+        lastUpdatedAt:
+          opts.lastUpdatedAt === undefined ? '2026-07-30T10:00:00Z' : opts.lastUpdatedAt,
         consentExpiresAt: opts.consentExpiresAt === undefined ? '2027-01-01T00:00:00Z' : opts.consentExpiresAt,
       }
     },
@@ -65,7 +67,32 @@ describe('syncAll', () => {
     const r = await syncAll(fakeGateway({ status: 'LOGIN_ERROR' }), newRepo(), ['i1'], '2026-07-30')
     expect(r.connections[0]!.healthy).toBe(false)
     expect(r.connections[0]!.warning).toMatch(/reautoriz/i)
-    expect(r.connections[0]!.staleSince).toBe('2026-07-12T10:00:00Z')
+    expect(r.connections[0]!.staleSince).toBe('2026-07-30T10:00:00Z')
+  })
+
+  it('avisa quando a Pluggy não coleta da instituição há dias, mesmo com status UPDATED', async () => {
+    // O caso que passou batido: status saudável, nosso sync recente, mas o dado
+    // da Pluggy parado — então banco novo conectado não aparece.
+    const r = await syncAll(
+      fakeGateway({ lastUpdatedAt: '2026-07-25T10:00:00Z' }),
+      newRepo(),
+      ['i1'],
+      '2026-07-30',
+    )
+    expect(r.connections[0]!.status).toBe('UPDATED')
+    expect(r.connections[0]!.healthy).toBe(true)
+    expect(r.connections[0]!.warning).toMatch(/não coleta/i)
+    expect(r.connections[0]!.warning).toMatch(/5 dias/)
+  })
+
+  it('coleta recente não gera aviso', async () => {
+    const r = await syncAll(
+      fakeGateway({ lastUpdatedAt: '2026-07-30T01:00:00Z' }),
+      newRepo(),
+      ['i1'],
+      '2026-07-30',
+    )
+    expect(r.connections[0]!.warning).toBeNull()
   })
 
   it('conexão pelo conector MeuPluggy (200) não gera aviso de cobrança', async () => {

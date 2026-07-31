@@ -17,6 +17,17 @@ const RESYNC_WINDOW_DAYS = 35
 /** Dias antes de `consentExpiresAt` em que já vale avisar. */
 const CONSENT_WARNING_DAYS = 30
 
+/**
+ * Idade máxima da COLETA antes de avisar.
+ *
+ * `lastUpdatedAt` é quando a Pluggy buscou na instituição — diferente de quando
+ * nós lemos a Pluggy. Sincronizar de hora em hora contra um cache de três dias
+ * parece fresco e não é. O conector MeuPluggy (200) não aceita atualização sob
+ * demanda ("MeuPluggy item cant be updated"), então esse atraso é observável
+ * mas não é corrigível por nós — resta avisar.
+ */
+const COLLECTION_STALE_DAYS = 2
+
 const HEALTHY_STATUSES = new Set(['UPDATED', 'UPDATING'])
 
 /**
@@ -47,6 +58,21 @@ export function assessHealth(item: DomainItem, now: string): ConnectionHealth {
       break
     default:
       break
+  }
+
+  if (item.lastUpdatedAt) {
+    const collectedOn = item.lastUpdatedAt.slice(0, 10)
+    const ageDays = Math.floor(
+      (Date.parse(`${now}T00:00:00Z`) - Date.parse(`${collectedOn}T00:00:00Z`)) / 86_400_000,
+    )
+    if (ageDays > COLLECTION_STALE_DAYS) {
+      warnings.push(
+        `${item.institutionName}: a Pluggy não coleta da instituição desde ${collectedOn} ` +
+          `(${ageDays} dias). Conta ou banco adicionado depois disso ainda não aparece aqui. ` +
+          `O conector MeuPluggy não aceita atualização sob demanda — ela roda sozinha, ` +
+          `cerca de uma vez por dia.`,
+      )
+    }
   }
 
   if (item.connectorId !== null && item.connectorId !== MEU_PLUGGY_CONNECTOR_ID) {
