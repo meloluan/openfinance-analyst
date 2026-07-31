@@ -103,6 +103,7 @@ describe('superfície MCP', () => {
     expect(tools.map((t) => t.name).sort()).toEqual([
       'budget_status',
       'card_bill',
+      'cash_flow',
       'find_recurring',
       'installments_outlook',
       'list_accounts',

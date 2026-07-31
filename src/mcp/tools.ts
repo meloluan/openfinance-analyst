@@ -11,7 +11,8 @@ import {
   today,
   type PeriodInput,
 } from '../analysis/period.js'
-import { comparePeriods, spendingByCategory, spendingByMonth } from '../analysis/spending.js'
+import { comparePeriods, round2, spendingByCategory, spendingByMonth } from '../analysis/spending.js'
+import { cashFlow } from '../analysis/cashflow.js'
 import { findRecurring } from '../analysis/recurring.js'
 import { installmentsOutlook } from '../analysis/installments.js'
 import { budgetStatus } from '../analysis/budget.js'
@@ -199,6 +200,44 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
       }
 
       return respond(repo, payload)
+    },
+  )
+
+  server.registerTool(
+    'cash_flow',
+    {
+      title: 'Fluxo de caixa',
+      description:
+        'Receita vs gasto mês a mês, separando o que é dinheiro de verdade entrando e saindo do ' +
+        'que é só movimento entre contas suas. Responde "por que não sobra dinheiro". ' +
+        'Não conta pagamento de fatura em dobro e trata investimento como poupança, não gasto.',
+      inputSchema: {
+        months: z
+          .number()
+          .int()
+          .min(1)
+          .max(36)
+          .default(12)
+          .describe('Quantos meses para trás analisar.'),
+      },
+    },
+    async ({ months }) => {
+      const now = today()
+      const kinds = new Map(repo.listAccounts().map((a) => [a.id, a.kind]))
+      const txs = repo.queryTransactions({
+        from: `${addMonths(monthOf(now), -(months - 1))}-01`,
+        to: now,
+      })
+      const flow = cashFlow(txs, kinds)
+      return respond(repo, {
+        ...flow,
+        mediaMensal: {
+          receita: round2(flow.totals.income / Math.max(flow.months.length, 1)),
+          gasto: round2(flow.totals.expenses / Math.max(flow.months.length, 1)),
+          sobra: round2(flow.totals.net / Math.max(flow.months.length, 1)),
+        },
+        mesesNoVermelho: flow.months.filter((m) => m.net < 0).map((m) => m.month),
+      })
     },
   )
 
