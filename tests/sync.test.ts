@@ -105,6 +105,14 @@ describe('syncAll', () => {
     expect(repo.listItems().map((i) => i.id)).toEqual(['i1'])
   })
 
+  it('sem nenhuma conexão, orienta como obter o item ID em vez de fingir sucesso', async () => {
+    const r = await syncAll(fakeGateway(), newRepo(), [], '2026-07-30')
+    expect(r.connections).toEqual([])
+    expect(r.errors).toHaveLength(1)
+    expect(r.errors[0]).toMatch(/Copiar Item ID/)
+    expect(r.errors[0]).toMatch(/dashboard\.pluggy\.ai/)
+  })
+
   it('sem itemIds declarados, usa os que já estão no banco', async () => {
     const repo = newRepo()
     await syncAll(fakeGateway(), repo, ['i1'], '2026-07-30')

@@ -81,6 +81,20 @@ export async function syncAll(
 
   const report: SyncReport = { connections: [], newTransactions: {}, errors: [] }
 
+  // Sem conexão declarada não há o que sincronizar — e um relatório vazio e
+  // silencioso pareceria sucesso. O itemId não está documentado pela Pluggy,
+  // então a mensagem carrega o caminho exato.
+  if (targets.length === 0) {
+    report.errors.push(
+      'Nenhuma conexão configurada. Para obter o item ID: conecte seus bancos em ' +
+        'meu.pluggy.ai, crie uma aplicação em dashboard.pluggy.ai (Applications), ' +
+        'adicione o conector "MeuPluggy" a ela, clique em "Ir para Demo", autorize com ' +
+        'sua conta do Meu Pluggy e use o menu de três pontos (canto superior direito) → ' +
+        '"Copiar Item ID". Passe o valor em PLUGGY_ITEM_IDS ou no argumento itemIds desta tool.',
+    )
+    return report
+  }
+
   for (const itemId of targets) {
     try {
       const item = await gateway.fetchItem(itemId)

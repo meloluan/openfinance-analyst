@@ -19,19 +19,25 @@ O **[Meu Pluggy](https://www.pluggy.ai/meu-pluggy)** resolve isso: a Pluggy é p
 
 ## Setup
 
-**1. Conecte seus bancos** em [meu.pluggy.ai](https://meu.pluggy.ai) — é o fluxo oficial de consentimento do Open Finance. O MCP nunca vê sua senha de banco.
+> São **dois portais separados, com cadastros separados**. `meu.pluggy.ai` é só o consentimento — ele não expõe credencial de API e não é onde você a procura. As credenciais nascem no `dashboard.pluggy.ai`.
 
-**2. Crie uma aplicação** em [dashboard.pluggy.ai](https://dashboard.pluggy.ai) e anote `client_id` e `client_secret`.
+**1. Conecte seus bancos** em [meu.pluggy.ai](https://meu.pluggy.ai) — fluxo oficial de consentimento do Open Finance. O MCP nunca vê sua senha de banco.
 
-**3. Anote os IDs das conexões.** O SDK da Pluggy não permite listar suas conexões, então elas precisam ser declaradas uma vez. Depois do primeiro `sync` ficam salvas no banco local.
+**2. Crie a aplicação** em [dashboard.pluggy.ai](https://dashboard.pluggy.ai) (outro cadastro) → aba **Applications** → nova aplicação. `CLIENT_ID` e `CLIENT_SECRET` aparecem aqui.
 
-**4. Instale:**
+**3. Adicione o conector `MeuPluggy`** à lista de conectores da aplicação.
+
+**4. Vincule e pegue o item ID.** Na aplicação, clique em **"Ir para Demo"**, faça login com a conta do Meu Pluggy e autorize — isso cria o Item. Depois, no **menu de três pontos (canto superior direito) → "Copiar Item ID"**.
+
+> Esse último passo não está na documentação da Pluggy. O `itemId` não aparece em nenhuma tela óbvia do dashboard, e o SDK não tem `fetchItems()` para descobri-lo — por isso ele precisa ser declarado uma vez em `PLUGGY_ITEM_IDS`. Depois do primeiro `sync` fica salvo no banco local e você não precisa mais dele.
+
+**5. Instale:**
 
 ```bash
 npm install && npm run build
 ```
 
-**5. Registre no Claude Code:**
+**6. Registre no Claude Code:**
 
 ```bash
 claude mcp add openfinance-analyst -- node /caminho/para/openfinance-analyst/dist/index.js
@@ -46,7 +52,7 @@ Com as variáveis de ambiente:
 | `PLUGGY_ITEM_IDS` | primeira vez | IDs das conexões, separados por vírgula |
 | `OFA_DATA_DIR` | não | default `~/.openfinance-analyst` |
 
-**6. Rode a tool `sync`** uma vez. O primeiro sync faz backfill de 24 meses.
+**7. Rode a tool `sync`** uma vez. O primeiro sync faz backfill de 24 meses.
 
 ## As tools
 
