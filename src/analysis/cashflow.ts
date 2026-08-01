@@ -17,6 +17,16 @@ const INTERNAL_CATEGORIES = new Set([
 /** Investimento é dinheiro guardado, não consumido — e resgate é dinheiro desguardado. */
 const INVESTMENT_CATEGORY = 'Investments'
 
+/**
+ * Categorias que não são consumo. Exportado para que qualquer visão de "gasto"
+ * use o mesmo critério do fluxo de caixa — senão dois painéis da mesma tela
+ * se contradizem, um chamando investimento de gasto e o outro de poupança.
+ */
+export const NON_EXPENSE_CATEGORIES: ReadonlySet<string> = new Set([
+  ...INTERNAL_CATEGORIES,
+  INVESTMENT_CATEGORY,
+])
+
 export type FlowMonth = {
   month: string
   /** entradas de verdade: salário, recebimentos, vendas */

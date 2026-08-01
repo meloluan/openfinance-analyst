@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { openDb } from '../../src/store/db.js'
 import { Repo } from '../../src/store/repo.js'
 import { buildDashboardData } from '../../src/dash/data.js'
+import { addMonths } from '../../src/analysis/period.js'
 import type { DomainTransaction } from '../../src/domain.js'
 
 const NOW = '2026-07-30'
@@ -116,6 +117,42 @@ describe('buildDashboardData', () => {
     const d = buildDashboardData(repo, NOW)
     expect(d.commitments.proximosMeses[0]!.month).toBe('2026-08')
     expect(d.commitments.proximosMeses[0]!.committed).toBe(100)
+  })
+
+  it('investimento NÃO aparece como gasto do mês', () => {
+    // O painel de fluxo trata investimento como poupança. Se o painel de gastos
+    // o tratasse como despesa, as duas metades da mesma tela se contradiriam.
+    repo.upsertTransactions([
+      tx({ amount: -500, category: 'Alimentação' }),
+      tx({ amount: -3000, category: 'Investments' }),
+      tx({ amount: -800, category: 'Credit card payment' }),
+    ])
+    const d = buildDashboardData(repo, NOW)
+    expect(d.spending.atual.map((c) => c.category)).toEqual(['Alimentação'])
+    expect(d.spending.atual[0]!.total).toBe(500)
+  })
+
+  it('a sobra em destaque é mediana, não média — um mês atípico não distorce', () => {
+    // 11 meses com sobra pequena e um mês excepcional.
+    const txs = []
+    for (let i = 0; i < 11; i++) {
+      const mes = addMonths('2025-09', i)
+      txs.push(tx({ date: `${mes}-10`, amount: 1000, category: 'Salary' }))
+      txs.push(tx({ date: `${mes}-11`, amount: -900, category: 'Shopping' }))
+    }
+    txs.push(tx({ date: '2026-07-10', amount: 50000, category: 'Salary' }))
+    repo.upsertTransactions(txs)
+
+    const d = buildDashboardData(repo, NOW)
+    expect(d.cashFlow.sobraTipicaMes).toBe(100)
+    // A média existe, mas é dominada pelo mês atípico — por isso não é o destaque.
+    expect(d.cashFlow.mediaMensal.sobra).toBeGreaterThan(4000)
+  })
+
+  it('recorrentes somam boleto e seguro, não só assinatura de streaming', () => {
+    const d = buildDashboardData(repo, NOW)
+    expect(d.commitments).toHaveProperty('recorrentes')
+    expect(d.commitments).toHaveProperty('custoMensalRecorrente')
   })
 
   it('banco vazio devolve estado inicial em vez de zeros', () => {

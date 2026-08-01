@@ -1,12 +1,13 @@
 import type { Repo } from '../store/repo.js'
 import type { DomainAccount } from '../domain.js'
 import { assessHealth } from '../sync.js'
-import { cashFlow, type CashFlowSummary } from '../analysis/cashflow.js'
+import { cashFlow, NON_EXPENSE_CATEGORIES, type CashFlowSummary } from '../analysis/cashflow.js'
 import { billComposition, type Bill } from '../analysis/bill.js'
 import { findRecurring, type Recurring } from '../analysis/recurring.js'
 import { installmentsOutlook, type OutlookMonth } from '../analysis/installments.js'
 import {
   comparePeriods,
+  median,
   round2,
   spendingByCategory,
   type CategoryComparison,
@@ -30,6 +31,12 @@ export type DashPayload = {
   }
   cashFlow: CashFlowSummary & {
     mediaMensal: { receita: number; gasto: number; sobra: number }
+    /**
+     * Mediana da sobra mensal. É o número que vai no destaque: a média é
+     * dominada por um mês atípico e faria parecer que sobra muito mais do que
+     * de fato sobra num mês comum.
+     */
+    sobraTipicaMes: number
     investidoLiquidoMes: number
   }
   accounts: { contas: DomainAccount[]; cartoes: DomainAccount[]; faturaAberta: Bill }
@@ -41,8 +48,9 @@ export type DashPayload = {
   commitments: {
     proximosMeses: OutlookMonth[]
     totalComprometido: number
-    assinaturas: Recurring[]
-    custoMensalAssinaturas: number
+    recorrentes: Recurring[]
+    /** Soma das cobranças mensais recorrentes — inclui boleto e seguro, não só assinatura. */
+    custoMensalRecorrente: number
   }
 }
 
@@ -78,7 +86,14 @@ export function buildDashboardData(repo: Repo, now: string): DashPayload {
 
   const periodo = resolvePeriod({ period: mes }, now)
   const anterior = previousPeriod(periodo)
-  const txsMes = repo.queryTransactions(periodo)
+
+  // Mesmo critério do fluxo de caixa: investimento e movimento entre contas
+  // próprias não são gasto. Sem isso os dois painéis da mesma tela se
+  // contradizem — um chamando investimento de gasto, o outro de poupança.
+  const soConsumo = (t: { category: string | null }): boolean =>
+    !NON_EXPENSE_CATEGORIES.has(t.category ?? '')
+  const txsMes = repo.queryTransactions(periodo).filter(soConsumo)
+  const txsMesAnterior = repo.queryTransactions(anterior).filter(soConsumo)
 
   // Janela para trás cobre o parcelamento mais longo com saldo; para frente é
   // obrigatória, porque a instituição manda parcela futura como transação
@@ -89,7 +104,7 @@ export function buildDashboardData(repo: Repo, now: string): DashPayload {
     kind: 'CREDIT',
   })
   const outlook = installmentsOutlook(txsCredito, OUTLOOK_MONTHS, mes)
-  const assinaturas = findRecurring(
+  const recorrentes = findRecurring(
     repo.queryTransactions({ from: `${addMonths(mes, -RECURRING_LOOKBACK_MONTHS)}-01`, to: now }),
   )
 
@@ -108,6 +123,7 @@ export function buildDashboardData(repo: Repo, now: string): DashPayload {
         gasto: round2(flow.totals.expenses / n),
         sobra: round2(flow.totals.net / n),
       },
+      sobraTipicaMes: round2(median(flow.months.map((m) => m.net))),
       investidoLiquidoMes: round2(flow.netSaved / n),
     },
     accounts: {
@@ -118,14 +134,14 @@ export function buildDashboardData(repo: Repo, now: string): DashPayload {
     spending: {
       periodo,
       atual: spendingByCategory(txsMes, overrides),
-      comparacao: comparePeriods(txsMes, repo.queryTransactions(anterior), overrides),
+      comparacao: comparePeriods(txsMes, txsMesAnterior, overrides),
     },
     commitments: {
       proximosMeses: outlook,
       totalComprometido: round2(outlook.reduce((s, m) => s + m.committed, 0)),
-      assinaturas,
-      custoMensalAssinaturas: round2(
-        assinaturas.filter((a) => a.cadence === 'MONTHLY').reduce((s, a) => s + a.amount, 0),
+      recorrentes,
+      custoMensalRecorrente: round2(
+        recorrentes.filter((a) => a.cadence === 'MONTHLY').reduce((s, a) => s + a.amount, 0),
       ),
     },
   }

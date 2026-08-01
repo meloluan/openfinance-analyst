@@ -81,6 +81,26 @@ Com as variáveis de ambiente:
 | `recategorize` | corrige a categoria de um estabelecimento, retroativamente |
 | `search_transactions` | busca livre, para o que não cabe nas agregações |
 
+## Dashboard
+
+```bash
+npm run build && npm run dash
+```
+
+Sobe um servidor local e abre o navegador. A página tem um botão **Atualizar** que roda o sync e recarrega os números — sem LLM no caminho.
+
+Quatro painéis: fluxo de caixa dos últimos 12 meses, contas e cartões com a fatura aberta, gastos do mês contra o anterior, e parcelas comprometidas mais recorrências detectadas.
+
+| | |
+|---|---|
+| escuta em | `127.0.0.1` apenas, nunca `0.0.0.0` |
+| porta | `4000`, ou `OFA_DASH_PORT` |
+| autenticação | token aleatório por sessão, na URL impressa no terminal |
+
+O token vive só na sessão: fechou o processo, a URL antiga não vale mais. Requisição sem ele recebe 403 — sem isso, qualquer página aberta no seu navegador poderia tentar ler `localhost`.
+
+O dashboard chama exatamente as mesmas funções de `src/analysis/` que as tools MCP chamam. Número que divergir entre a página e o Claude é bug, não interpretação.
+
 ## Decisões que valem conhecer
 
 **Os dados ficam no seu disco, cifrados.** SQLite com SQLCipher, chave no Keychain do macOS, arquivo `600` em `~/.openfinance-analyst/`. As tools de análise leem só do banco local — nunca da rede — o que torna a resposta rápida, barata e determinística.
