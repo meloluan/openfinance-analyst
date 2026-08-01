@@ -405,8 +405,13 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
     async ({ pattern, category }) => {
       repo.addOverride(pattern, category)
       const now = today()
+      // Para frente também: parcela futura é transação datada à frente, e uma
+      // regra de categoria precisa valer para ela tanto quanto para o passado.
       const afetadas = repo
-        .queryTransactions({ from: `${addMonths(monthOf(now), -24)}-01`, to: now })
+        .queryTransactions({
+          from: `${addMonths(monthOf(now), -24)}-01`,
+          to: `${addMonths(monthOf(now), 12)}-28`,
+        })
         .filter((tx) => `${tx.merchantName ?? ''} ${tx.description}`.toUpperCase().includes(pattern.toUpperCase()))
 
       return respond(repo, {

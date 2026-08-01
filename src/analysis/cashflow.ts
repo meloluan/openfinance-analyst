@@ -43,11 +43,34 @@ export type FlowMonth = {
   internal: number
 }
 
+/**
+ * Excluir pagamento de fatura das despesas só é correto se as compras do cartão
+ * estiverem todas registradas. Quando o histórico do cartão começa depois do
+ * período analisado — ou o cartão nem foi conectado — a fatura paga é dinheiro
+ * que saiu de verdade e as compras correspondentes não existem no banco de
+ * dados. O gasto simplesmente evapora, e a sobra aparece inflada.
+ *
+ * Isto mede exatamente esse buraco em vez de escondê-lo.
+ */
+export type CardCoverage = {
+  /** saiu da conta pagando fatura */
+  billPaid: number
+  /** compras registradas nos cartões */
+  purchasesRecorded: number
+  /** gasto real que não tem lançamento correspondente */
+  unrecorded: number
+}
+
 export type CashFlowSummary = {
   months: FlowMonth[]
   totals: Omit<FlowMonth, 'month'>
   /** poupança líquida real: invested - redeemed */
   netSaved: number
+  cardCoverage: CardCoverage
+  /** despesa somando o gasto de cartão sem lançamento; é o número confiável */
+  expensesAdjusted: number
+  /** sobra recalculada com `expensesAdjusted` */
+  netAdjusted: number
 }
 
 /**
@@ -132,5 +155,28 @@ export function cashFlow(
     internal: sum((m) => m.internal),
   }
 
-  return { months, totals, netSaved: round2(totals.invested - totals.redeemed) }
+  let billPaid = 0
+  let purchasesRecorded = 0
+  for (const tx of txs) {
+    const kind = accountKindById.get(tx.accountId) ?? 'BANK'
+    if (tx.amount >= 0) continue
+    if (kind === 'BANK' && tx.category === 'Credit card payment') billPaid += -tx.amount
+    if (kind === 'CREDIT') purchasesRecorded += -tx.amount
+  }
+  const cardCoverage: CardCoverage = {
+    billPaid: round2(billPaid),
+    purchasesRecorded: round2(purchasesRecorded),
+    unrecorded: round2(Math.max(0, billPaid - purchasesRecorded)),
+  }
+
+  const expensesAdjusted = round2(totals.expenses + cardCoverage.unrecorded)
+
+  return {
+    months,
+    totals,
+    netSaved: round2(totals.invested - totals.redeemed),
+    cardCoverage,
+    expensesAdjusted,
+    netAdjusted: round2(totals.income - expensesAdjusted),
+  }
 }
