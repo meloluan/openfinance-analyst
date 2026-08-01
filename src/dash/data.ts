@@ -14,6 +14,7 @@ import {
   type CategoryTotal,
 } from '../analysis/spending.js'
 import { addMonths, monthOf, previousPeriod, resolvePeriod } from '../analysis/period.js'
+import { dataCoverage, type Coverage } from '../analysis/coverage.js'
 
 const CASHFLOW_MONTHS = 12
 const OUTLOOK_MONTHS = 6
@@ -29,6 +30,8 @@ export type DashPayload = {
     avisos: string[]
     semDados: boolean
   }
+  /** Até onde os dados vão de verdade, e o que limitou a janela. */
+  coverage: Coverage & { janelaAnalisada: { from: string; to: string } }
   cashFlow: CashFlowSummary & {
     mediaMensal: { receita: number; gasto: number; sobra: number }
     /**
@@ -78,10 +81,32 @@ export function buildDashboardData(repo: Repo, now: string): DashPayload {
   const cartoes = accounts.filter((a) => a.kind === 'CREDIT')
 
   const kinds = new Map(accounts.map((a) => [a.id, a.kind]))
-  const flow = cashFlow(
-    repo.queryTransactions({ from: `${addMonths(mes, -(CASHFLOW_MONTHS - 1))}-01`, to: now }),
-    kinds,
-  )
+
+  // A janela vem da cobertura real, não de um "12 meses" arbitrário. Analisar
+  // além do que os dados cobrem não dá um número incompleto — dá um número
+  // errado, porque a conta registra fatura de meses cujas compras não existem.
+  const todas = repo.queryTransactions({ from: '1970-01-01', to: `${addMonths(mes, 24)}-28` })
+  const cobertura = dataCoverage(accounts, todas, now)
+  const janelaPedida = `${addMonths(mes, -(CASHFLOW_MONTHS - 1))}-01`
+  const from =
+    cobertura.reliableFrom && cobertura.reliableFrom > janelaPedida
+      ? cobertura.reliableFrom
+      : janelaPedida
+
+  if (cobertura.reliableFrom && cobertura.reliableFrom > janelaPedida) {
+    avisos.push(
+      `Análise limitada a partir de ${from}: ${cobertura.limitadoPor}. ` +
+        `Antes disso o histórico não cobre todas as contas e os números sairiam errados.`,
+    )
+  }
+  if (cobertura.semLancamentos.length > 0) {
+    avisos.push(
+      `Sem lançamento nenhum: ${cobertura.semLancamentos.join(', ')}. ` +
+        `A instituição não publica o histórico dessas contas.`,
+    )
+  }
+
+  const flow = cashFlow(repo.queryTransactions({ from, to: now }), kinds)
   const n = Math.max(flow.months.length, 1)
 
   const periodo = resolvePeriod({ period: mes }, now)
@@ -116,6 +141,7 @@ export function buildDashboardData(repo: Repo, now: string): DashPayload {
       avisos,
       semDados,
     },
+    coverage: { ...cobertura, janelaAnalisada: { from, to: now } },
     cashFlow: {
       ...flow,
       mediaMensal: {

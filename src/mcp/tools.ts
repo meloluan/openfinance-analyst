@@ -13,6 +13,7 @@ import {
 } from '../analysis/period.js'
 import { comparePeriods, round2, spendingByCategory, spendingByMonth } from '../analysis/spending.js'
 import { cashFlow } from '../analysis/cashflow.js'
+import { dataCoverage } from '../analysis/coverage.js'
 import { findRecurring } from '../analysis/recurring.js'
 import { installmentsOutlook } from '../analysis/installments.js'
 import { budgetStatus } from '../analysis/budget.js'
@@ -223,13 +224,28 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
     },
     async ({ months }) => {
       const now = today()
-      const kinds = new Map(repo.listAccounts().map((a) => [a.id, a.kind]))
-      const txs = repo.queryTransactions({
-        from: `${addMonths(monthOf(now), -(months - 1))}-01`,
-        to: now,
-      })
-      const flow = cashFlow(txs, kinds)
+      const accounts = repo.listAccounts()
+      const kinds = new Map(accounts.map((a) => [a.id, a.kind]))
+
+      // Janela limitada pela cobertura real: além dela o número sai errado,
+      // não apenas incompleto.
+      const cobertura = dataCoverage(
+        accounts,
+        repo.queryTransactions({ from: '1970-01-01', to: `${addMonths(monthOf(now), 24)}-28` }),
+        now,
+      )
+      const janelaPedida = `${addMonths(monthOf(now), -(months - 1))}-01`
+      const from =
+        cobertura.reliableFrom && cobertura.reliableFrom > janelaPedida
+          ? cobertura.reliableFrom
+          : janelaPedida
+
+      const flow = cashFlow(repo.queryTransactions({ from, to: now }), kinds)
       return respond(repo, {
+        janelaAnalisada: { from, to: now },
+        limitadoPor:
+          from === cobertura.reliableFrom ? cobertura.limitadoPor : 'os meses pedidos',
+        contasSemHistorico: cobertura.semLancamentos,
         ...flow,
         mediaMensal: {
           receita: round2(flow.totals.income / Math.max(flow.months.length, 1)),
