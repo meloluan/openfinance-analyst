@@ -26,6 +26,23 @@ export type Coverage = {
 }
 
 /**
+ * Recua o início pedido até onde os dados sustentam.
+ *
+ * Toda análise passa por aqui: é o que impede que uma janela mais larga que a
+ * cobertura produza número errado em vez de número incompleto.
+ */
+export function clampFrom(desiredFrom: string, coverage: Coverage): string {
+  return coverage.reliableFrom && coverage.reliableFrom > desiredFrom
+    ? coverage.reliableFrom
+    : desiredFrom
+}
+
+/** Se um período inteiro cabe dentro da cobertura. */
+export function isCovered(from: string, coverage: Coverage): boolean {
+  return coverage.reliableFrom === null || from >= coverage.reliableFrom
+}
+
+/**
  * Até onde os dados vão, de verdade.
  *
  * O Open Finance entrega só o que a instituição guarda, e cada uma guarda um

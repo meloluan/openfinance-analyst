@@ -14,7 +14,7 @@ import {
   type CategoryTotal,
 } from '../analysis/spending.js'
 import { addMonths, monthOf, previousPeriod, resolvePeriod } from '../analysis/period.js'
-import { dataCoverage, type Coverage } from '../analysis/coverage.js'
+import { clampFrom, dataCoverage, isCovered, type Coverage } from '../analysis/coverage.js'
 
 const CASHFLOW_MONTHS = 12
 const OUTLOOK_MONTHS = 6
@@ -47,6 +47,8 @@ export type DashPayload = {
     periodo: { from: string; to: string }
     atual: CategoryTotal[]
     comparacao: CategoryComparison[]
+    /** false quando o mês anterior está fora da cobertura e comparar mentiria */
+    comparavel: boolean
   }
   commitments: {
     proximosMeses: OutlookMonth[]
@@ -88,12 +90,9 @@ export function buildDashboardData(repo: Repo, now: string): DashPayload {
   const todas = repo.queryTransactions({ from: '1970-01-01', to: `${addMonths(mes, 24)}-28` })
   const cobertura = dataCoverage(accounts, todas, now)
   const janelaPedida = `${addMonths(mes, -(CASHFLOW_MONTHS - 1))}-01`
-  const from =
-    cobertura.reliableFrom && cobertura.reliableFrom > janelaPedida
-      ? cobertura.reliableFrom
-      : janelaPedida
+  const from = clampFrom(janelaPedida, cobertura)
 
-  if (cobertura.reliableFrom && cobertura.reliableFrom > janelaPedida) {
+  if (from !== janelaPedida) {
     avisos.push(
       `Análise limitada a partir de ${from}: ${cobertura.limitadoPor}. ` +
         `Antes disso o histórico não cobre todas as contas e os números sairiam errados.`,
@@ -118,19 +117,28 @@ export function buildDashboardData(repo: Repo, now: string): DashPayload {
   const soConsumo = (t: { category: string | null }): boolean =>
     !NON_EXPENSE_CATEGORIES.has(t.category ?? '')
   const txsMes = repo.queryTransactions(periodo).filter(soConsumo)
-  const txsMesAnterior = repo.queryTransactions(anterior).filter(soConsumo)
+
+  // Comparar contra um mês fora da cobertura produziria uma queda inventada:
+  // o mês anterior pareceria barato só porque metade dele não foi coletada.
+  const anteriorCoberto = isCovered(anterior.from, cobertura)
+  const txsMesAnterior = anteriorCoberto
+    ? repo.queryTransactions(anterior).filter(soConsumo)
+    : []
 
   // Janela para trás cobre o parcelamento mais longo com saldo; para frente é
   // obrigatória, porque a instituição manda parcela futura como transação
   // datada à frente e `to: now` as deixaria justamente de fora.
   const txsCredito = repo.queryTransactions({
-    from: `${addMonths(mes, -24)}-01`,
+    from: clampFrom(`${addMonths(mes, -24)}-01`, cobertura),
     to: `${addMonths(mes, OUTLOOK_MONTHS + 2)}-28`,
     kind: 'CREDIT',
   })
   const outlook = installmentsOutlook(txsCredito, OUTLOOK_MONTHS, mes)
   const recorrentes = findRecurring(
-    repo.queryTransactions({ from: `${addMonths(mes, -RECURRING_LOOKBACK_MONTHS)}-01`, to: now }),
+    repo.queryTransactions({
+      from: clampFrom(`${addMonths(mes, -RECURRING_LOOKBACK_MONTHS)}-01`, cobertura),
+      to: now,
+    }),
   )
 
   return {
@@ -160,7 +168,8 @@ export function buildDashboardData(repo: Repo, now: string): DashPayload {
     spending: {
       periodo,
       atual: spendingByCategory(txsMes, overrides),
-      comparacao: comparePeriods(txsMes, txsMesAnterior, overrides),
+      comparacao: anteriorCoberto ? comparePeriods(txsMes, txsMesAnterior, overrides) : [],
+      comparavel: anteriorCoberto,
     },
     commitments: {
       proximosMeses: outlook,

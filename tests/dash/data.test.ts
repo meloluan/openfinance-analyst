@@ -161,3 +161,36 @@ describe('buildDashboardData', () => {
     expect(d.header.avisos.join(' ')).toMatch(/sync|atualizar/i)
   })
 })
+
+describe('janela limitada pela cobertura', () => {
+  it('recua a análise até onde a conta que estreia mais tarde tem dado', () => {
+    const repo = seed()
+    repo.upsertTransactions([
+      tx({ accountId: 'acc1', date: '2026-02-10', amount: 5000, category: 'Salary' }),
+      // O cartão só começa em maio: antes disso a foto está incompleta.
+      tx({ accountId: 'card1', date: '2026-05-10', amount: -300, category: 'Shopping' }),
+    ])
+    const d = buildDashboardData(repo, NOW)
+    expect(d.coverage.janelaAnalisada.from).toBe('2026-06-01')
+    expect(d.coverage.limitadoPor).toMatch(/Black/)
+    expect(d.header.avisos.join(' ')).toMatch(/limitada a partir de 2026-06-01/)
+  })
+
+  it('não compara com um mês anterior fora da cobertura', () => {
+    const repo = seed()
+    repo.upsertTransactions([
+      tx({ accountId: 'card1', date: '2026-07-10', amount: -300, category: 'Shopping' }),
+    ])
+    const d = buildDashboardData(repo, NOW)
+    expect(d.spending.comparavel).toBe(false)
+    expect(d.spending.comparacao).toEqual([])
+  })
+
+  it('reporta as contas sem lançamento nenhum', () => {
+    const repo = seed()
+    repo.upsertTransactions([tx({ accountId: 'acc1', amount: -50, category: 'X' })])
+    const d = buildDashboardData(repo, NOW)
+    expect(d.coverage.semLancamentos).toContain('BB')
+    expect(d.header.avisos.join(' ')).toMatch(/Sem lançamento nenhum/)
+  })
+})

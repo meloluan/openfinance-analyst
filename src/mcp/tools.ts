@@ -13,7 +13,7 @@ import {
 } from '../analysis/period.js'
 import { comparePeriods, round2, spendingByCategory, spendingByMonth } from '../analysis/spending.js'
 import { cashFlow } from '../analysis/cashflow.js'
-import { dataCoverage } from '../analysis/coverage.js'
+import { clampFrom, dataCoverage, isCovered, type Coverage } from '../analysis/coverage.js'
 import { findRecurring } from '../analysis/recurring.js'
 import { installmentsOutlook } from '../analysis/installments.js'
 import { budgetStatus } from '../analysis/budget.js'
@@ -81,6 +81,20 @@ const periodShape = {
 
 export function registerTools(server: McpServer, ctx: ToolContext): void {
   const { repo, gateway } = ctx
+
+  /**
+   * Cobertura real dos dados, recalculada a cada chamada.
+   *
+   * Toda análise recua sua janela até aqui. Analisar além da cobertura não dá
+   * número incompleto, dá número errado — a conta corrente registra o
+   * pagamento de fatura de meses cujas compras não existem no banco.
+   */
+  const cobertura = (now: string): Coverage =>
+    dataCoverage(
+      repo.listAccounts(),
+      repo.queryTransactions({ from: '1970-01-01', to: `${addMonths(monthOf(now), 24)}-28` }),
+      now,
+    )
 
   // ---------------------------------------------------------------- estado
 
@@ -170,19 +184,25 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
         return fail(err instanceof Error ? err.message : 'Período inválido.')
       }
 
+      const now = today()
+      const cob = cobertura(now)
       const overrides = repo.listOverrides()
-      const txs = repo.queryTransactions({ ...range, kind })
+      const inicio = clampFrom(range.from, cob)
+      const txs = repo.queryTransactions({ ...range, from: inicio, kind })
+
       const payload: Record<string, unknown> = {
-        periodo: range,
+        periodo: { from: inicio, to: range.to },
         porCategoria: spendingByCategory(txs, overrides),
         totalGasto: spendingByCategory(txs, overrides).reduce((s, c) => s + c.total, 0),
+      }
+      if (inicio !== range.from) {
+        payload.avisoJanela = `Período recuado para ${inicio}: ${cob.limitadoPor}.`
       }
 
       if (byMonth) payload.porMes = spendingByMonth(txs)
 
       // Parcela futura chega como transação datada à frente. Somá-la sem dizer
       // transformaria "quanto gastei" em "quanto gastei mais quanto ainda vou".
-      const now = today()
       const futuras = txs.filter((tx) => tx.date > now && tx.amount < 0)
       if (futuras.length > 0) {
         payload.observacao =
@@ -192,12 +212,19 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
 
       if (compareWithPrevious) {
         const prev = previousPeriod(range)
-        payload.periodoAnterior = prev
-        payload.comparacao = comparePeriods(
-          txs,
-          repo.queryTransactions({ ...prev, kind }),
-          overrides,
-        )
+        // Comparar contra mês fora da cobertura inventaria uma queda: o anterior
+        // pareceria barato só porque metade dele nunca foi coletada.
+        if (!isCovered(prev.from, cob)) {
+          payload.comparacao = null
+          payload.avisoComparacao = `Sem comparação: ${prev.from} está fora da cobertura (${cob.limitadoPor}).`
+        } else {
+          payload.periodoAnterior = prev
+          payload.comparacao = comparePeriods(
+            txs,
+            repo.queryTransactions({ ...prev, kind }),
+            overrides,
+          )
+        }
       }
 
       return respond(repo, payload)
@@ -224,28 +251,17 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
     },
     async ({ months }) => {
       const now = today()
-      const accounts = repo.listAccounts()
-      const kinds = new Map(accounts.map((a) => [a.id, a.kind]))
+      const cob = cobertura(now)
+      const kinds = new Map(repo.listAccounts().map((a) => [a.id, a.kind]))
 
-      // Janela limitada pela cobertura real: além dela o número sai errado,
-      // não apenas incompleto.
-      const cobertura = dataCoverage(
-        accounts,
-        repo.queryTransactions({ from: '1970-01-01', to: `${addMonths(monthOf(now), 24)}-28` }),
-        now,
-      )
       const janelaPedida = `${addMonths(monthOf(now), -(months - 1))}-01`
-      const from =
-        cobertura.reliableFrom && cobertura.reliableFrom > janelaPedida
-          ? cobertura.reliableFrom
-          : janelaPedida
+      const from = clampFrom(janelaPedida, cob)
 
       const flow = cashFlow(repo.queryTransactions({ from, to: now }), kinds)
       return respond(repo, {
         janelaAnalisada: { from, to: now },
-        limitadoPor:
-          from === cobertura.reliableFrom ? cobertura.limitadoPor : 'os meses pedidos',
-        contasSemHistorico: cobertura.semLancamentos,
+        limitadoPor: from === janelaPedida ? 'os meses pedidos' : cob.limitadoPor,
+        contasSemHistorico: cob.semLancamentos,
         ...flow,
         mediaMensal: {
           receita: round2(flow.totals.income / Math.max(flow.months.length, 1)),
@@ -275,7 +291,8 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
     },
     async ({ lookbackMonths }) => {
       const now = today()
-      const from = `${addMonths(monthOf(now), -lookbackMonths)}-01`
+      const cob = cobertura(now)
+      const from = clampFrom(`${addMonths(monthOf(now), -lookbackMonths)}-01`, cob)
       const recorrentes = findRecurring(repo.queryTransactions({ from, to: now }))
       return respond(repo, {
         janela: { from, to: now },
@@ -306,7 +323,7 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
 
       // Janela ampla: compra de meses anteriores pode ter sido alocada nesta fatura.
       const txs = repo.queryTransactions({
-        from: `${addMonths(billMonth, -2)}-01`,
+        from: clampFrom(`${addMonths(billMonth, -2)}-01`, cobertura(today())),
         to: `${addMonths(billMonth, 1)}-28`,
         kind: 'CREDIT',
         accountIds: accountId ? [accountId] : undefined,
@@ -334,7 +351,7 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
       // transações datadas à frente, e `to: now` as deixaria de fora justamente
       // na tool que existe para enxergá-las.
       const txs = repo.queryTransactions({
-        from: `${addMonths(monthOf(now), -24)}-01`,
+        from: clampFrom(`${addMonths(monthOf(now), -24)}-01`, cobertura(now)),
         to: `${addMonths(monthOf(now), months + 2)}-28`,
         kind: 'CREDIT',
       })
@@ -389,7 +406,7 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
       }
 
       const linhas = budgetStatus(
-        repo.queryTransactions(range),
+        repo.queryTransactions({ ...range, from: clampFrom(range.from, cobertura(today())) }),
         budgets,
         range,
         today(),

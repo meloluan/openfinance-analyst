@@ -73,6 +73,7 @@ section h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:va
       <h1>openfinance-analyst</h1>
       <div class="saldo" id="saldo-total">—</div>
       <div class="tempos" id="tempos"></div>
+      <div class="tempos" id="janela"></div>
     </div>
     <button id="btn-atualizar">&#8635; Atualizar</button>
   </div>
@@ -123,6 +124,12 @@ function renderFluxo(d){
     '<div><span>investido líquido/mês</span><strong>' + brl(f.investidoLiquidoMes) + '</strong></div>' +
     '</div>' +
     '<div class="sub" style="color:var(--muted);margin:-4px 0 10px">mediana, não média — um mês atípico distorceria a média o ano inteiro</div>';
+  if (f.cardCoverage && f.cardCoverage.unrecorded > 0){
+    out += '<div class="aviso" style="margin-bottom:10px">' +
+      brl(f.cardCoverage.unrecorded) + ' de fatura paga não tem compra correspondente no histórico. ' +
+      'A despesa real do período é ' + brl(f.expensesAdjusted) + ', não ' + brl(f.totals.expenses) + '.' +
+      '</div>';
+  }
   var max = 1;
   for (var i=0;i<f.months.length;i++) max = Math.max(max, f.months[i].income, f.months[i].expenses);
   for (var j=0;j<f.months.length;j++){
@@ -149,13 +156,37 @@ function renderContas(d){
   }
   out += '<div class="destaque" style="border:0;margin:12px 0 0;padding:12px 0 0;border-top:1px solid var(--line)">' +
     '<div><span>fatura aberta</span><strong>' + brl(d.accounts.faturaAberta.total) + '</strong></div></div>';
+
+  // Cobertura por conta: dizer de quando até quando cada uma tem dado é o que
+  // impede alguém de ler um total como se fosse o ano inteiro.
+  var cv = d.coverage;
+  if (cv && cv.accounts && cv.accounts.length){
+    out += '<div class="sub" style="color:var(--muted);margin:12px 0 4px">histórico disponível</div>';
+    for (var j=0;j<cv.accounts.length;j++){
+      var a2 = cv.accounts[j];
+      out += '<div class="row"><div class="lbl">' + esc(a2.name) + '</div><div class="sub">' +
+        (a2.from ? esc(a2.from) + ' a ' + esc(a2.to) + ' · ' + a2.count + ' tx' : 'sem lançamento') +
+        '</div></div>';
+    }
+  }
   return out || '<div class="vazio">nenhuma conta</div>';
 }
 
 function renderGastos(d){
-  var out = '', c = d.spending.comparacao.slice(0, 10);
+  var out = '', i;
+  // Sem cobertura do mês anterior, comparar inventaria uma queda — então
+  // mostramos só o mês corrente, dizendo por quê.
+  if (!d.spending.comparavel){
+    var a = d.spending.atual.slice(0, 10);
+    if (!a.length) return '<div class="vazio">nenhum gasto no mês</div>';
+    out += '<div class="sub" style="color:var(--muted);margin-bottom:8px">' +
+      'sem comparação: o mês anterior está fora da cobertura dos dados</div>';
+    for (i=0;i<a.length;i++) out += linha(a[i].category, a[i].total, false, a[i].count + ' lançamentos');
+    return out;
+  }
+  var c = d.spending.comparacao.slice(0, 10);
   if (!c.length) return '<div class="vazio">nenhum gasto no mês</div>';
-  for (var i=0;i<c.length;i++){
+  for (i=0;i<c.length;i++){
     var x = c[i];
     var delta = x.deltaPct == null ? 'novo' : (x.delta >= 0 ? '+' : '') + x.deltaPct.toFixed(0) + '%';
     out += linha(x.category, x.current, false, 'mês anterior ' + brl(x.previous) + ' · ' + delta);
@@ -195,6 +226,12 @@ function render(d){
   el('tempos').innerHTML =
     'lido da Pluggy <b>' + quando(d.header.lastSyncedAt) + '</b> · ' +
     'coletado do banco <b>' + quando(d.header.lastCollectedAt) + '</b>';
+
+  var cv = d.coverage;
+  el('janela').innerHTML = cv && cv.janelaAnalisada
+    ? 'analisando <b>' + esc(cv.janelaAnalisada.from) + '</b> a <b>' + esc(cv.janelaAnalisada.to) + '</b>' +
+      (cv.limitadoPor ? ' · limite dos dados: ' + esc(cv.limitadoPor) : '')
+    : '';
 
   var av = '';
   for (var i=0;i<d.header.avisos.length;i++) av += '<div class="aviso">' + esc(d.header.avisos[i]) + '</div>';
