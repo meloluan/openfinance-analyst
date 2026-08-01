@@ -19,6 +19,17 @@ const expenseValue = (tx: DomainTransaction): number => -tx.amount
 
 export const round2 = (n: number): number => Math.round(n * 100) / 100
 
+/**
+ * Mediana. Para valor mensal ela resiste a um mês atípico que a média não
+ * resiste — um mês de receita excepcional distorce a média o ano inteiro.
+ */
+export function median(values: number[]): number {
+  if (values.length === 0) return 0
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!
+}
+
 export function spendingByCategory(
   txs: DomainTransaction[],
   overrides: Override[],
