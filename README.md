@@ -96,6 +96,17 @@ Quatro painéis: fluxo de caixa dos últimos 12 meses, contas e cartões com a f
 | escuta em | `127.0.0.1` apenas, nunca `0.0.0.0` |
 | porta | `4000`, ou `OFA_DASH_PORT` |
 | autenticação | token aleatório por sessão, na URL impressa no terminal |
+| credenciais | variável de ambiente, ou Keychain como fallback |
+
+**Sobre as credenciais:** o MCP recebe as suas por variável de ambiente, injetadas pelo Claude Code. Um comando de shell comum não herda nada disso, então o `dash` também procura no Keychain — que é o que os dois enxergam. Para gravá-las lá:
+
+```bash
+security add-generic-password -U -s openfinance-analyst -a pluggy-client-id     -w '<seu client id>'
+security add-generic-password -U -s openfinance-analyst -a pluggy-client-secret -w '<seu secret>'
+security add-generic-password -U -s openfinance-analyst -a pluggy-item-ids      -w '<ids,separados,por,vírgula>'
+```
+
+Sem credencial nenhuma o dashboard **ainda abre**, em modo leitura: os dados já sincronizados estão no banco local. Só o botão Atualizar falha, dizendo o porquê.
 
 O token vive só na sessão: fechou o processo, a URL antiga não vale mais. Requisição sem ele recebe 403 — sem isso, qualquer página aberta no seu navegador poderia tentar ler `localhost`.
 

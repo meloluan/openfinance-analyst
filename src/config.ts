@@ -29,17 +29,42 @@ export function parseConfig(env: Record<string, string | undefined>): Config {
     throw new Error(`Faltando ${missing.join(' e ')}. ${SETUP_HINT}`)
   }
 
-  const dataDir = env.OFA_DATA_DIR?.trim() || join(homedir(), '.openfinance-analyst')
+  return { ...parsePaths(env), clientId: clientId!, clientSecret: clientSecret! }
+}
 
+/** A parte da config que não depende de credencial — sempre resolvível. */
+export function parsePaths(env: Record<string, string | undefined>): Omit<
+  Config,
+  'clientId' | 'clientSecret'
+> {
+  const dataDir = env.OFA_DATA_DIR?.trim() || join(homedir(), '.openfinance-analyst')
   return {
-    clientId: clientId!,
-    clientSecret: clientSecret!,
     itemIds: (env.PLUGGY_ITEM_IDS ?? '')
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),
     dataDir,
     dbPath: join(dataDir, 'data.db'),
+  }
+}
+
+/**
+ * Env primeiro, Keychain depois.
+ *
+ * O MCP recebe as credenciais por variável de ambiente, injetadas pelo Claude
+ * Code. `npm run dash` é um shell comum e não herda nada disso — o Keychain é
+ * o que os dois enxergam.
+ */
+export function resolveEnv(
+  env: Record<string, string | undefined>,
+  fromKeychain: (account: string) => string | null,
+): Record<string, string | undefined> {
+  return {
+    ...env,
+    PLUGGY_CLIENT_ID: env.PLUGGY_CLIENT_ID?.trim() || fromKeychain('pluggy-client-id') || undefined,
+    PLUGGY_CLIENT_SECRET:
+      env.PLUGGY_CLIENT_SECRET?.trim() || fromKeychain('pluggy-client-secret') || undefined,
+    PLUGGY_ITEM_IDS: env.PLUGGY_ITEM_IDS?.trim() || fromKeychain('pluggy-item-ids') || undefined,
   }
 }
 
