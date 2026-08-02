@@ -98,7 +98,14 @@ Quatro painéis: fluxo de caixa dos últimos 12 meses, contas e cartões com a f
 | autenticação | token aleatório por sessão, na URL impressa no terminal |
 | credenciais | variável de ambiente, ou Keychain como fallback |
 
-**Sobre as credenciais:** o MCP recebe as suas por variável de ambiente, injetadas pelo Claude Code. Um comando de shell comum não herda nada disso, então o `dash` também procura no Keychain — que é o que os dois enxergam. Para gravá-las lá:
+**Sobre as credenciais:** o MCP recebe as suas por variável de ambiente, injetadas pelo Claude Code. Um comando de shell comum não herda nada disso, então o `dash` também procura no cofre de segredos — que é o que os dois enxergam.
+
+| plataforma | onde os segredos ficam |
+|---|---|
+| macOS | Keychain, serviço `openfinance-analyst` |
+| Linux e demais | um arquivo por segredo, `600`, em `~/.openfinance-analyst/secrets/` |
+
+`OFA_SECRET_BACKEND=file` força o backend de arquivo mesmo no macOS; `OFA_SECRETS_DIR` muda o diretório. No macOS, para gravar no Keychain:
 
 ```bash
 security add-generic-password -U -s openfinance-analyst -a pluggy-client-id     -w '<seu client id>'
