@@ -5,7 +5,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { openDb } from '../../src/store/db.js'
 import { Repo } from '../../src/store/repo.js'
 import { registerTools } from '../../src/mcp/tools.js'
-import { today } from '../../src/analysis/period.js'
+import { addDays, addMonths as addMonthStr, today } from '../../src/analysis/period.js'
 import type { Gateway } from '../../src/pluggy/client.js'
 import type { DomainTransaction } from '../../src/domain.js'
 
@@ -98,7 +98,7 @@ describe('superfície MCP', () => {
     client = await connect(repo)
   })
 
-  it('expõe exatamente as dez tools do spec', async () => {
+  it('expõe exatamente as tools do spec', async () => {
     const { tools } = await client.listTools()
     expect(tools.map((t) => t.name).sort()).toEqual([
       'budget_status',
@@ -108,6 +108,7 @@ describe('superfície MCP', () => {
       'installments_outlook',
       'list_accounts',
       'recategorize',
+      'recent_transactions',
       'search_transactions',
       'set_budget',
       'spending_by_category',
@@ -214,6 +215,32 @@ describe('superfície MCP', () => {
     expect(out.totalComprometido).toBe(600)
     expect(out.proximosMeses[0].committed).toBe(200)
     expect(out.proximosMeses[3].committed).toBe(0)
+  })
+
+  it('recent_transactions lista conta e cartão, do mais novo pro mais antigo', async () => {
+    repo.upsertTransactions([
+      tx({ id: 'a', date: addDays(NOW, -5), amount: -50, accountId: 'acc1', description: 'PADARIA' }),
+      tx({ id: 'b', date: addDays(NOW, -1), amount: -120, accountId: 'card1', description: 'AMAZON' }),
+      tx({ id: 'c', date: addDays(NOW, -3), amount: 3000, accountId: 'acc1', description: 'PIX recebido' }),
+    ])
+    const out = parse(
+      await client.callTool({ name: 'recent_transactions', arguments: { days: 7 } }),
+    )
+    expect(out.transacoes.map((t: { id: string }) => t.id)).toEqual(['b', 'c', 'a'])
+  })
+
+  it('recent_transactions exclui parcela futura datada à frente', async () => {
+    repo.upsertTransactions([
+      tx({ id: 'hoje', date: addDays(NOW, -2), amount: -100, accountId: 'card1' }),
+      tx({ id: 'parcela-futura', date: `${addMonthStr(THIS_MONTH, 3)}-15`, amount: -100,
+           accountId: 'card1', installmentNumber: 4, installmentTotal: 12 }),
+    ])
+    const out = parse(
+      await client.callTool({ name: 'recent_transactions', arguments: { days: 7 } }),
+    )
+    const ids = out.transacoes.map((t: { id: string }) => t.id)
+    expect(ids).toContain('hoje')
+    expect(ids).not.toContain('parcela-futura')
   })
 
   it('search_transactions respeita o limite', async () => {

@@ -4,6 +4,7 @@ import type { Gateway } from '../pluggy/client.js'
 import type { Repo } from '../store/repo.js'
 import { assessHealth, syncAll } from '../sync.js'
 import {
+  addDays,
   addMonths,
   monthOf,
   previousPeriod,
@@ -152,6 +153,40 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
       },
     },
     async ({ term, limit }) => respond(repo, { transacoes: repo.searchTransactions(term, limit) }),
+  )
+
+  server.registerTool(
+    'recent_transactions',
+    {
+      title: 'Transações recentes',
+      description:
+        'Lista os lançamentos recentes, do mais novo para o mais antigo. Cobre conta e cartão ' +
+        '(PIX, débito, compras). Só transações já ocorridas — parcelas futuras datadas à frente ' +
+        'ficam de fora.',
+      inputSchema: {
+        days: z
+          .number()
+          .int()
+          .min(1)
+          .max(90)
+          .default(7)
+          .describe('Janela em dias para trás a partir de hoje.'),
+        kind: z
+          .enum(['BANK', 'CREDIT'])
+          .optional()
+          .describe('Filtra só conta (BANK) ou só cartão (CREDIT). Default: os dois.'),
+        limit: z.number().int().min(1).max(500).default(200).describe('Máximo de resultados.'),
+      },
+    },
+    async ({ days, kind, limit }) => {
+      const now = today()
+      // `to: now` exclui parcelas futuras (datadas à frente), então uma compra
+      // parcelada aparece uma vez, não uma por parcela.
+      const txs = repo
+        .queryTransactions({ from: addDays(now, -days), to: now, kind })
+        .slice(0, limit)
+      return respond(repo, { transacoes: txs })
+    },
   )
 
   // --------------------------------------------------------------- análise
